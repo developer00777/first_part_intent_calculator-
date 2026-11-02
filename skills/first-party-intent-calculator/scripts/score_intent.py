@@ -249,7 +249,7 @@ def main():
         "level_counts": level_counts,
         "levels": levels,
         "sources_present": sorted(ev["source"].unique().tolist()),
-        "signal_mix": [{"key": k, "label": sig[k]["label"], "points": round(signal_points[k], 1), "count": signal_counts[k]}
+        "signal_mix": [{"key": k, "label": sig[k]["label"], "points": round(float(signal_points[k]), 1), "count": int(signal_counts[k])}
                        for k in sorted(signal_points, key=lambda k: -signal_points[k])],
         "weekly_activity": weeks,
         "accounts": acct.head(50).to_dict(orient="records") if len(acct) else [],
