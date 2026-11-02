@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "intent-calculator",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "observability": { "enabled": true },
+
+  // The Docker image built from ./Dockerfile runs behind this Worker.
+  "containers": [
+    {
+      "class_name": "IntentContainer",
+      "image": "./Dockerfile",
+      "instance_type": "standard-1",
+      "max_instances": 3
+    }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "INTENT_CONTAINER", "class_name": "IntentContainer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["IntentContainer"] }],
+
+  // Non-secret settings. Set the key with: npx wrangler secret put OPENROUTER_API_KEY
+  "vars": {
+    "OPENROUTER_MODEL": "anthropic/claude-sonnet-5.5",
+    "APP_URL": "https://intent-calculator.example.workers.dev",
+    "CONTAINER_INSTANCES": "1"
+  }
+}

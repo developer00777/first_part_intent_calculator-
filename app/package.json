@@ -1,0 +1,21 @@
+{
+  "name": "first-party-intent-calculator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "First-Party Intent Calculator: scores accounts from uploaded engagement exports, with an OpenRouter model guided by the intent skill.",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch --env-file-if-exists=../.env src/server.js"
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.14.0",
+    "hono": "^4.7.0",
+    "papaparse": "^5.5.0",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>First-Party Intent Calculator</title>
+<link rel="icon" href="/assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,300..700,0..100&family=Montserrat:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+  --paper:#FDFCF8; --sand:#F2EDE5; --card:#FFFFFF;
+  --ink:#1A1230; --ink2:#463F5C; --muted:#6E6782;
+  --line:#E4DEEE; --accent:#6D08BE; --accent-soft:#F1E7FB;
+  --ok:#0B7F6E; --ok-soft:#E2F5F1; --flag:#C1003C; --flag-soft:#FCE8EE;
+  --gold:#FFB703; --red:#E8033A; --purple:#6D08BE; --magenta:#DD1286; --teal:#0095A0; --orange:#FF6903; --lav:#7A76DA; --navy:#011A6B;
+  --grad:linear-gradient(100deg,#6D08BE 0%,#A10FA8 45%,#E8033A 78%,#FF6903 100%);
+  --night:linear-gradient(180deg,#0B031D 0%,#2A0758 38%,#4E0C8E 62%,#C8146F 88%,#FF7A3A 100%);
+  --shadow:0 1px 2px rgba(26,18,48,.06),0 12px 32px -12px rgba(26,18,48,.18);
+  --gut:clamp(16px,4.2vw,72px);
+  --serif:"Fraunces",Georgia,serif; --sans:"Montserrat",Arial,sans-serif; --mono:"IBM Plex Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --paper:#110A22; --sand:#170E2D; --card:#1E1438;
+    --ink:#F4F0FB; --ink2:#CFC6E2; --muted:#A59CBC;
+    --line:#3A2D5A; --accent:#C9A2F5; --accent-soft:#2B1B4D;
+    --ok:#5ED6C1; --ok-soft:#123A36; --flag:#FF7FA0; --flag-soft:#3D1426;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 36px -14px rgba(0,0,0,.6);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --paper:#110A22; --sand:#170E2D; --card:#1E1438;
+  --ink:#F4F0FB; --ink2:#CFC6E2; --muted:#A59CBC;
+  --line:#3A2D5A; --accent:#C9A2F5; --accent-soft:#2B1B4D;
+  --ok:#5ED6C1; --ok-soft:#123A36; --flag:#FF7FA0; --flag-soft:#3D1426;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 14px 36px -14px rgba(0,0,0,.6);
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-behavior:smooth;scroll-padding-top:env(safe-area-inset-top,0px);font-size:19px}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--sans);font-size:19px;line-height:1.6;-webkit-font-smoothing:antialiased}
+img{max-width:100%}
+.wrap{max-width:1600px;margin:0 auto;padding:0 var(--gut)}
+.eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.14em;font-size:19px;font-weight:600;color:var(--accent)}
+h1,h2,h3{margin:0;font-weight:420;font-family:var(--serif);font-variation-settings:"SOFT" 100;letter-spacing:-.01em;line-height:1.08}
+h2{font-size:clamp(36px,4.4vw,64px)}
+h3{font-size:clamp(26px,2.2vw,32px);font-family:var(--sans);font-weight:700;letter-spacing:-.01em;line-height:1.25}
+p{margin:0}
+.lead{font-size:clamp(20px,1.5vw,24px);color:var(--ink2);max-width:62ch}
+section{padding:clamp(64px,8vw,120px) 0}
+.alt{background:var(--sand)}
+button,input,select,textarea{font:inherit;font-size:19px;color:inherit}
+:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+
+/* ---------- HERO ---------- */
+.hero{background:var(--night);color:#fff;position:relative;overflow:hidden;padding:0 0 clamp(72px,9vw,140px)}
+.stars{position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(1.5px 1.5px at 12% 18%,#fff8 50%,transparent 51%),radial-gradient(1px 1px at 28% 32%,#fff9 50%,transparent 51%),radial-gradient(1.5px 1.5px at 46% 12%,#fff7 50%,transparent 51%),radial-gradient(1px 1px at 64% 26%,#fffa 50%,transparent 51%),radial-gradient(2px 2px at 82% 14%,#fff8 50%,transparent 51%),radial-gradient(1px 1px at 90% 38%,#fff9 50%,transparent 51%),radial-gradient(1px 1px at 8% 44%,#fff7 50%,transparent 51%),radial-gradient(1.5px 1.5px at 56% 46%,#fff6 50%,transparent 51%)}
+.nav{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:24px 0;position:relative;z-index:2}
+.nav img{width:clamp(180px,16vw,220px);height:auto;display:block}
+.nav a.navlink{color:#fff;text-decoration:none;font-weight:600;padding:12px 22px;border:1px solid rgba(255,255,255,.4);border-radius:999px;min-height:48px;display:inline-flex;align-items:center;transition:background .25s,border-color .25s}
+.nav a.navlink:hover{background:rgba(255,255,255,.12);border-color:#fff}
+.hero-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:clamp(32px,5vw,80px);align-items:center;margin-top:clamp(28px,5vw,72px);position:relative;z-index:2}
+.hero .eyebrow{color:var(--gold)}
+.hero h1{font-size:clamp(46px,6.2vw,96px);margin:18px 0 24px}
+.hero h1 em{font-style:italic;background:linear-gradient(90deg,#FFB64F,#FF7A3A,#FF5C8A);-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero .lead{color:rgba(255,255,255,.88)}
+.cta-row{display:flex;flex-wrap:wrap;gap:16px;margin-top:36px}
+.btn{display:inline-flex;align-items:center;gap:14px;border:0;cursor:pointer;border-radius:999px;font-weight:700;text-decoration:none;min-height:56px;padding:8px 10px 8px 28px;transition:transform .25s,box-shadow .25s,background .25s}
+.btn .arr{width:42px;height:42px;border-radius:50%;display:grid;place-items:center;background:var(--gold);color:#0C0420;overflow:hidden;position:relative}
+.btn .arr span{transition:transform .3s}
+.btn:hover .arr span{transform:translateX(4px)}
+.btn-light{background:#fff;color:#1A1230}
+.btn-light:hover{transform:translateY(-2px);box-shadow:0 14px 30px -10px rgba(0,0,0,.5)}
+.btn-ghost{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.45);padding:8px 28px}
+.btn-ghost:hover{background:rgba(255,255,255,.1)}
+.hero-card{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.2);border-radius:28px;padding:clamp(24px,2.6vw,40px);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+.hero-card .mono{font-family:var(--mono);text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.75)}
+.levels{display:grid;gap:14px;margin-top:20px}
+.lvl{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;padding:16px 18px;border-radius:18px;background:rgba(255,255,255,.07);transition:transform .25s,background .25s}
+.lvl:hover{transform:translateX(4px);background:rgba(255,255,255,.12)}
+.lvl .dot{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-size:22px}
+.lvl b{display:block;font-size:21px}
+.lvl small{font-size:19px;color:rgba(255,255,255,.78)}
+.lvl .rng{font-family:var(--mono);font-weight:600}
+.bar{height:12px;border-radius:99px;background:rgba(255,255,255,.14);overflow:hidden;margin-top:22px}
+.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7A76DA,#DD1286,#FFB703);border-radius:99px;transition:width 1.6s cubic-bezier(.2,.8,.2,1)}
+.bar-legend{display:flex;justify-content:space-between;font-family:var(--mono);color:rgba(255,255,255,.75);margin-top:8px}
+
+/* ---------- STEPS ---------- */
+.head{display:grid;grid-template-columns:1fr 1fr;gap:clamp(24px,4vw,64px);align-items:end;margin-bottom:clamp(36px,4vw,60px)}
+.head h2{margin-top:12px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(16px,2vw,28px);counter-reset:s}
+.step{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:clamp(24px,2.4vw,36px);box-shadow:var(--shadow);position:relative;overflow:hidden;transition:transform .3s}
+.step:hover{transform:translateY(-4px)}
+.step::before{content:"";position:absolute;inset:0 0 auto 0;height:6px;background:var(--c)}
+.step .num{font-family:var(--mono);font-weight:600;color:var(--c);letter-spacing:.12em}
+.step h3{margin:14px 0 10px}
+.step p{color:var(--ink2)}
+.step svg{display:block;margin-top:22px;width:100%;height:auto}
+
+/* ---------- WORKSPACE ---------- */
+.work{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr);gap:clamp(20px,2.6vw,40px);align-items:start}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:28px;padding:clamp(22px,2.4vw,40px);box-shadow:var(--shadow)}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
+.field label{display:block;font-weight:700;margin-bottom:8px}
+.field .hint{display:block;color:var(--muted);font-weight:400}
+.field input,.field select,.field textarea{width:100%;min-height:56px;padding:12px 16px;border:1.5px solid var(--line);border-radius:14px;background:var(--paper);transition:border-color .2s,box-shadow .2s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.field.full{grid-column:1/-1}
+.field textarea{min-height:110px;resize:vertical}
+.drop{position:relative;border:2.5px dashed color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:24px;padding:clamp(32px,4vw,56px) 24px;text-align:center;background:linear-gradient(180deg,var(--accent-soft),transparent);cursor:pointer;transition:border-color .25s,background .25s,transform .25s}
+.drop:hover,.drop.over{border-color:var(--accent);transform:scale(1.005)}
+.drop.over{background:var(--accent-soft)}
+.drop input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+.drop .ico{width:84px;height:84px;margin:0 auto 18px;border-radius:24px;display:grid;place-items:center;background:var(--grad);color:#fff;box-shadow:0 14px 30px -12px rgba(109,8,190,.6)}
+.drop strong{display:block;font-size:clamp(22px,1.8vw,28px)}
+.drop p{color:var(--ink2);margin-top:6px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:18px}
+.chip{font-family:var(--mono);padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink2)}
+.files{display:grid;gap:16px;margin-top:24px}
+.file{border:1px solid var(--line);border-radius:20px;padding:20px;background:var(--paper);animation:in .4s ease both}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.file-top{display:grid;grid-template-columns:auto 1fr auto;gap:16px;align-items:center}
+.ftype{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;color:#fff;font-family:var(--mono);font-weight:600;background:var(--c,#6D08BE)}
+.fname{font-weight:700;word-break:break-all}
+.fmeta{color:var(--muted)}
+.icon-btn{width:48px;height:48px;border-radius:14px;border:1px solid var(--line);background:var(--card);cursor:pointer;display:grid;place-items:center;transition:background .2s,border-color .2s}
+.icon-btn:hover{border-color:var(--flag);background:var(--flag-soft)}
+.file-row{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:16px}
+.file-row select{min-height:48px;border-radius:12px;border:1.5px solid var(--line);background:var(--card);padding:6px 14px}
+.col{display:inline-flex;align-items:center;gap:8px;padding:6px 14px;border-radius:999px;font-weight:600;border:1px solid transparent}
+.col.on{background:var(--ok-soft);color:var(--ok)}
+.col.off{background:transparent;color:var(--muted);border-color:var(--line)}
+.status{margin-top:14px;padding:12px 16px;border-radius:14px;font-weight:600}
+.status.ok{background:var(--ok-soft);color:var(--ok)}
+.status.check{background:var(--flag-soft);color:var(--flag)}
+.status.load{background:var(--accent-soft);color:var(--accent)}
+details.prev{margin-top:12px}
+details.prev summary{cursor:pointer;font-weight:600;color:var(--accent);min-height:44px;display:flex;align-items:center}
+.tbl{overflow-x:auto;border:1px solid var(--line);border-radius:14px;margin-top:8px}
+.tbl table{border-collapse:collapse;width:100%;font-size:19px}
+.tbl th,.tbl td{padding:10px 14px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+.tbl th{font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--ink2);background:var(--sand)}
+.side{position:sticky;top:24px;display:grid;gap:20px}
+.ring-wrap{display:grid;grid-template-columns:auto 1fr;gap:22px;align-items:center;margin-top:16px}
+.ring-wrap svg{width:170px;height:170px}
+.ring-num{font-family:var(--serif);font-size:44px;fill:var(--ink)}
+.ring-sub{font-family:var(--mono);font-size:19px;fill:var(--muted)}
+.src-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.src-list li{display:flex;align-items:center;gap:12px;color:var(--muted);transition:color .3s}
+.src-list li i{width:16px;height:16px;border-radius:5px;background:var(--line);flex:none;transition:background .3s}
+.src-list li.on{color:var(--ink);font-weight:600}
+.src-list li.on i{background:var(--c)}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:22px}
+.kpi{border:1px solid var(--line);border-radius:18px;padding:14px 16px;background:var(--paper)}
+.kpi b{display:block;font-family:var(--serif);font-weight:420;font-size:40px;line-height:1.1}
+.kpi span{color:var(--muted)}
+.run{width:100%;justify-content:space-between;margin-top:22px;background:var(--ink);color:var(--paper)}
+.run[disabled]{opacity:.45;cursor:not-allowed}
+.run:not([disabled]):hover{transform:translateY(-2px);box-shadow:0 14px 30px -12px rgba(26,18,48,.5)}
+.note{color:var(--muted);margin-top:14px}
+.privacy{display:flex;gap:14px;align-items:flex-start;background:var(--accent-soft);border-radius:20px;padding:18px 20px;color:var(--ink2)}
+.privacy svg{flex:none;margin-top:4px}
+.result{display:none;margin-top:18px;padding:18px 20px;border-radius:18px;background:var(--ok-soft);color:var(--ok);font-weight:600}
+.result.show{display:block;animation:in .4s ease both}
+.result.busy{background:var(--accent-soft);color:var(--accent)}
+.result.bad{background:var(--flag-soft);color:var(--flag)}
+.result .rh{font-weight:700;display:block;margin-bottom:6px}
+.result .rl{display:flex;flex-wrap:wrap;gap:6px 14px;font-weight:600;margin:8px 0 4px}
+.result .rl i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+.result .acts{display:grid;gap:8px;margin-top:14px}
+.result .acts a{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-radius:12px;background:var(--card);color:var(--ink);text-decoration:none;font-weight:600;border:1px solid var(--line);transition:transform .2s}
+.result .acts a:hover{transform:translateY(-1px)}
+.result .acts a small{color:var(--muted);font-weight:500;font-family:var(--mono);font-size:12px}
+.result .rtop{margin:10px 0 0;padding:0;list-style:none;font-weight:500;color:var(--ink2)}
+.result .rtop li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px dashed var(--line)}
+.result .rwarn{margin-top:10px;font-weight:500;font-size:13px;color:var(--muted)}
+.spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:8px}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- SOURCES ---------- */
+.sources{display:grid;grid-template-columns:repeat(5,1fr);gap:16px}
+.src{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:12px;transition:transform .3s,border-color .3s}
+.src:hover{transform:translateY(-4px);border-color:var(--c)}
+.src .badge{width:56px;height:56px;border-radius:16px;display:grid;place-items:center;background:var(--c);color:#fff}
+.src h3{font-size:24px}
+.src .k{font-family:var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--c);font-weight:600;margin-top:4px}
+.src ul{margin:0;padding-left:20px;color:var(--ink2)}
+.src .tools{color:var(--muted);margin-top:auto;padding-top:10px;border-top:1px solid var(--line)}
+
+/* ---------- OUTPUTS ---------- */
+.outs{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:clamp(16px,2vw,28px)}
+.out{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:clamp(22px,2.4vw,36px);box-shadow:var(--shadow)}
+.out h3{margin:10px 0 12px}
+.out p{color:var(--ink2)}
+.sample{font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.out .viz{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;margin-top:20px}
+.out .viz svg{width:150px;height:150px}
+.legend{display:grid;gap:8px}
+.legend span{display:flex;align-items:center;gap:10px}
+.legend i{width:16px;height:16px;border-radius:5px;display:inline-block}
+.hbars{display:grid;gap:12px;margin-top:20px}
+.hb{display:grid;grid-template-columns:110px 1fr;gap:12px;align-items:center;font-family:var(--mono)}
+.hb div{height:22px;border-radius:8px;background:var(--grad);width:0;transition:width 1.2s cubic-bezier(.2,.8,.2,1)}
+.cols{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.cols span{font-family:var(--mono);padding:6px 12px;border-radius:10px;background:var(--accent-soft);color:var(--accent)}
+
+/* ---------- CTA + FOOTER ---------- */
+.cta{background:var(--grad);color:#fff;border-radius:32px;padding:clamp(32px,5vw,72px);display:grid;grid-template-columns:1.4fr auto;gap:28px;align-items:center}
+.cta h2{font-size:clamp(34px,3.8vw,56px)}
+.cta p{color:rgba(255,255,255,.9);margin-top:12px;max-width:56ch}
+footer{background:#0B031D;color:rgba(255,255,255,.82);padding:40px 0}
+footer .wrap{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:center}
+footer img{width:190px;height:auto;display:block}
+footer a{color:#FFB64F}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}.reveal{opacity:1;transform:none}html{scroll-behavior:auto}}
+
+@media (max-width:1280px){.sources{grid-template-columns:repeat(3,1fr)}.outs{grid-template-columns:1fr 1fr}.outs .out:first-child{grid-column:1/-1}}
+@media (max-width:1024px){.hero-grid,.work,.head{grid-template-columns:1fr}.side{position:static}.steps{grid-template-columns:1fr}.cta{grid-template-columns:1fr}}
+@media (max-width:720px){.fields{grid-template-columns:1fr}.sources,.outs{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.ring-wrap{grid-template-columns:1fr;justify-items:center}.out .viz{grid-template-columns:1fr;justify-items:center}.nav a.navlink{padding:10px 16px}.hb{grid-template-columns:90px 1fr}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="stars"></div>
+  <div class="wrap">
+    <nav class="nav">
+      <img src="/assets/logo.png" alt="LakeB2B, Enabling Growth" width="220" height="62">
+      <a class="navlink" href="#upload">Upload files</a>
+    </nav>
+    <div class="hero-grid">
+      <div>
+        <div class="eyebrow">First-Party Intent Calculator</div>
+        <h1>See which accounts are <em>leaning in</em>, using data you already own.</h1>
+        <p class="lead">Upload your website, email, form, webinar and CRM exports. We combine them into one account-level intent score from 0 to 100, with a clear reason behind every number.</p>
+        <div class="cta-row">
+          <a class="btn btn-light" href="#upload">Start your upload <span class="arr"><span>&#8594;</span></span></a>
+          <a class="btn btn-ghost" href="#exports">Which files do I need?</a>
+        </div>
+      </div>
+      <aside class="hero-card" aria-label="Intent levels">
+        <div class="mono">Every account lands in one of three levels</div>
+        <div class="levels">
+          <div class="lvl"><span class="dot" style="background:#E8033A">&#128293;</span><div><b>Hot</b><small>Sales outreach this week</small></div><span class="rng">70 to 100</span></div>
+          <div class="lvl"><span class="dot" style="background:#FF6903">&#127780;&#65039;</span><div><b>Warm</b><small>Targeted nurture content</small></div><span class="rng">40 to 69</span></div>
+          <div class="lvl"><span class="dot" style="background:#7A76DA">&#128064;</span><div><b>Watch</b><small>Keep in general campaigns</small></div><span class="rng">0 to 39</span></div>
+        </div>
+        <div class="bar" aria-hidden="true"><i id="heroBar"></i></div>
+        <div class="bar-legend"><span>0</span><span>40</span><span>70</span><span>100</span></div>
+      </aside>
+    </div>
+  </div>
+</header>
+
+<main>
+<section>
+  <div class="wrap">
+    <div class="head reveal">
+      <div><div class="eyebrow">How it works</div><h2>Three steps from scattered exports to a ranked account list</h2></div>
+      <p class="lead">No new tracking, no data purchase. The score comes entirely from activity your prospects already had with your brand.</p>
+    </div>
+    <div class="steps">
+      <article class="step reveal" style="--c:#6D08BE">
+        <div class="num">STEP 01</div><h3>Upload your exports</h3>
+        <p>Drop in any mix of CSV or Excel files. One file is enough to start, and every extra source sharpens the picture.</p>
+        <svg viewBox="0 0 320 120" aria-hidden="true"><rect x="20" y="20" width="70" height="86" rx="12" fill="#6D08BE" opacity=".18"/><rect x="40" y="12" width="70" height="86" rx="12" fill="#6D08BE" opacity=".35"/><rect x="60" y="4" width="70" height="86" rx="12" fill="#6D08BE"/><path d="M95 60V34m0 0-12 12m12-12 12 12" stroke="#fff" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/><g fill="#6D08BE" opacity=".5"><rect x="160" y="22" width="140" height="12" rx="6"/><rect x="160" y="48" width="110" height="12" rx="6"/><rect x="160" y="74" width="126" height="12" rx="6"/></g></svg>
+      </article>
+      <article class="step reveal" style="--c:#DD1286">
+        <div class="num">STEP 02</div><h3>We score every account</h3>
+        <p>Signals like demo requests, pricing visits and webinar attendance earn points, weighted for recency and buying group size.</p>
+        <svg viewBox="0 0 320 120" aria-hidden="true"><g><rect x="20" y="70" width="34" height="40" rx="8" fill="#DD1286" opacity=".3"/><rect x="66" y="48" width="34" height="62" rx="8" fill="#DD1286" opacity=".5"/><rect x="112" y="28" width="34" height="82" rx="8" fill="#DD1286" opacity=".75"/><rect x="158" y="10" width="34" height="100" rx="8" fill="#DD1286"/></g><circle cx="262" cy="60" r="44" fill="none" stroke="#DD1286" stroke-opacity=".2" stroke-width="12"/><circle cx="262" cy="60" r="44" fill="none" stroke="#DD1286" stroke-width="12" stroke-dasharray="214 276" stroke-linecap="round" transform="rotate(-90 262 60)"/><text x="262" y="68" text-anchor="middle" font-family="Fraunces,Georgia,serif" font-size="28" fill="#DD1286">78</text></svg>
+      </article>
+      <article class="step reveal" style="--c:#FF6903">
+        <div class="num">STEP 03</div><h3>Act on the results</h3>
+        <p>Get a visual intent report for leaders and CRM-ready CSV files your team can import and filter by Hot accounts.</p>
+        <svg viewBox="0 0 320 120" aria-hidden="true"><rect x="20" y="10" width="280" height="100" rx="16" fill="#FF6903" opacity=".12"/><g font-family="IBM Plex Mono,monospace" font-size="19" font-weight="600"><rect x="36" y="24" width="64" height="24" rx="12" fill="#E8033A"/><rect x="36" y="56" width="64" height="24" rx="12" fill="#FF6903"/><rect x="36" y="88" width="64" height="14" rx="7" fill="#7A76DA"/></g><g fill="#FF6903" opacity=".55"><rect x="116" y="30" width="160" height="12" rx="6"/><rect x="116" y="62" width="120" height="12" rx="6"/><rect x="116" y="90" width="90" height="10" rx="5"/></g></svg>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="alt" id="upload">
+  <div class="wrap">
+    <div class="head reveal">
+      <div><div class="eyebrow">Your workspace</div><h2>Upload your engagement data</h2></div>
+      <p class="lead">Each file is checked in your browser as you add it, so you can see right away whether the columns we need are in place.</p>
+    </div>
+    <div class="work">
+      <div class="panel reveal">
+        <div class="fields">
+          <div class="field">
+            <label for="company">Company name <span class="hint">Shown in the report title</span></label>
+            <input id="company" type="text" placeholder="e.g. Northwind Analytics" autocomplete="organization">
+          </div>
+          <div class="field">
+            <label for="email">Your work email <span class="hint">Optional, shown on the report</span></label>
+            <input id="email" type="email" placeholder="you@company.com" autocomplete="email">
+          </div>
+          <div class="field">
+            <label for="window">Export window <span class="hint">90 days works well</span></label>
+            <select id="window">
+              <option>Last 30 days</option>
+              <option selected>Last 90 days</option>
+              <option>Last 6 months</option>
+              <option>Last 12 months</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="view">Score as of <span class="hint">How recency is measured</span></label>
+            <select id="view">
+              <option value="data" selected>Latest date in my data</option>
+              <option value="today">Today (live view)</option>
+            </select>
+          </div>
+          <div class="field full">
+            <label for="notes">Anything special about your sales process? <span class="hint">Optional, for example: "webinars are our main buying signal"</span></label>
+            <textarea id="notes" placeholder="Tell us which signals matter most to your team"></textarea>
+          </div>
+        </div>
+
+        <div class="drop" id="drop">
+          <input id="fileInput" type="file" multiple accept=".csv,.tsv,.txt,.xlsx,.xls" aria-label="Choose files to upload">
+          <div class="ico"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V4m0 0-5 5m5-5 5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
+          <strong>Drag your files here, or click to browse</strong>
+          <p>CSV or Excel, up to 25 MB each. Add as many sources as you have.</p>
+          <div class="chips"><span class="chip">.CSV</span><span class="chip">.XLSX</span><span class="chip">.XLS</span><span class="chip">.TSV</span></div>
+        </div>
+        <div class="files" id="files" aria-live="polite"></div>
+      </div>
+
+      <aside class="side">
+        <div class="panel reveal">
+          <div class="eyebrow">Readiness</div>
+          <h3 style="margin-top:8px">Sources covered</h3>
+          <div class="ring-wrap">
+            <svg viewBox="0 0 180 180" role="img" aria-labelledby="ringT"><title id="ringT">Data sources covered</title><g id="ring" transform="rotate(-90 90 90)"></g><text id="ringNum" class="ring-num" x="90" y="92" text-anchor="middle">0/5</text><text class="ring-sub" x="90" y="120" text-anchor="middle">SOURCES</text></svg>
+            <ul class="src-list" id="srcList"></ul>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><b id="kFiles">0</b><span>Files added</span></div>
+            <div class="kpi"><b id="kRows">0</b><span>Rows found</span></div>
+          </div>
+          <button class="btn run" id="run" disabled>Calculate intent scores <span class="arr"><span>&#8594;</span></span></button>
+          <p class="note" id="runNote">Add at least one file with a date column and an email or domain column.</p>
+          <div class="result" id="result" role="status"></div>
+        </div>
+        <div class="privacy reveal">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6l-8-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+          <p>Your contact data is used only to build your report and CSV files. Files are processed in memory and not stored, and contact emails are never sent to the AI model.</p>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<section id="exports">
+  <div class="wrap">
+    <div class="head reveal">
+      <div><div class="eyebrow">Which files to pull</div><h2>Five sources, one rule: a date plus an email or domain</h2></div>
+      <p class="lead">Everything else is a bonus. Ask for activity level exports (one row per open, click or visit) rather than campaign summaries.</p>
+    </div>
+    <div class="sources" id="sourceCards"></div>
+  </div>
+</section>
+
+<section class="alt">
+  <div class="wrap">
+    <div class="head reveal">
+      <div><div class="eyebrow">What you receive</div><h2>A report for leaders, files for your CRM</h2></div>
+      <p class="lead">Three deliverables, ready to share or import. Domain is the matching key for accounts and Email for contacts.</p>
+    </div>
+    <div class="outs">
+      <article class="out reveal">
+        <div class="sample">Example layout</div>
+        <h3>Visual intent report</h3>
+        <p>KPI cards, intent level split, top accounts, signal mix and weekly activity, all in one shareable page.</p>
+        <div class="viz">
+          <svg viewBox="0 0 150 150" aria-hidden="true"><g transform="rotate(-90 75 75)" fill="none" stroke-width="22"><circle cx="75" cy="75" r="52" stroke="#E8033A" stroke-dasharray="65 327"/><circle cx="75" cy="75" r="52" stroke="#FF6903" stroke-dasharray="104 327" stroke-dashoffset="-67"/><circle cx="75" cy="75" r="52" stroke="#7A76DA" stroke-dasharray="152 327" stroke-dashoffset="-173"/></g></svg>
+          <div class="legend"><span><i style="background:#E8033A"></i>Hot</span><span><i style="background:#FF6903"></i>Warm</span><span><i style="background:#7A76DA"></i>Watch</span></div>
+        </div>
+        <div class="hbars" id="hbars">
+          <div class="hb"><span>ACCT A</span><div data-w="94%"></div></div>
+          <div class="hb"><span>ACCT B</span><div data-w="81%"></div></div>
+          <div class="hb"><span>ACCT C</span><div data-w="72%"></div></div>
+        </div>
+      </article>
+      <article class="out reveal">
+        <div class="sample">CSV file</div>
+        <h3>Account scores</h3>
+        <p>One row per account, ready to update company records in HubSpot, Salesforce or Zoho.</p>
+        <div class="cols"><span>Account Name</span><span>Domain</span><span>Intent Score</span><span>Intent Level</span><span>Engaged Contacts</span><span>Top Signals</span><span>Last Activity</span><span>Suggested Action</span><span>Score Reason</span></div>
+      </article>
+      <article class="out reveal">
+        <div class="sample">CSV file</div>
+        <h3>Contact scores</h3>
+        <p>One row per contact, carrying their account's score and level onto each person in your CRM.</p>
+        <div class="cols"><span>Email</span><span>Account Name</span><span>Domain</span><span>Contact Points</span><span>Top Signal</span><span>Last Activity</span><span>Account Score</span><span>Account Level</span></div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="cta reveal">
+      <div>
+        <h2>Want to see intent beyond your own channels?</h2>
+        <p>First-party data shows who is engaging with you. Third-party intent data from LakeB2B adds the accounts researching your category elsewhere, before they ever reach your site.</p>
+      </div>
+      <a class="btn btn-light" href="https://www.lakeb2b.com/contact-us" target="_blank" rel="noopener">Book a 20 minute data review <span class="arr"><span>&#8594;</span></span></a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <img src="/assets/logo.png" alt="LakeB2B, Enabling Growth" width="190" height="54">
+    <p>First-Party Intent Calculator, powered by LakeB2B. <a href="https://www.lakeb2b.com" target="_blank" rel="noopener">lakeb2b.com</a></p>
+  </div>
+</footer>
+
+<script>
+/* Scoring service endpoint (same origin). Set to "" for browser-only preview mode. */
+const INTENT_CONFIG = { endpoint: "/api/score" };
+
+const SOURCES = {
+  web:     {label:"Website analytics", short:"WEB", c:"#6D08BE", must:["Date","Page URL or path","Company domain or email"], nice:["Company name","Page title"], tools:"Visitor ID tools, HubSpot, Account Engagement, Marketo",
+            icon:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>'},
+  email:   {label:"Email platform", short:"EML", c:"#DD1286", must:["Date","Recipient email","Event (open, click, reply)"], nice:["Campaign name","Clicked link"], tools:"Mailchimp, HubSpot, Marketo, Klaviyo, Brevo",
+            icon:'<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'},
+  form:    {label:"Form submissions", short:"FRM", c:"#E8033A", must:["Date","Email","Form name"], nice:["Company name"], tools:"HubSpot forms, Typeform, Gravity Forms, Webflow",
+            icon:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/>'},
+  webinar: {label:"Webinar list", short:"WBN", c:"#FF6903", must:["Email","Registration or webinar date"], nice:["Attended (yes/no)","Company","Webinar title"], tools:"Zoom, ON24, GoTo Webinar, Livestorm",
+            icon:'<rect x="3" y="5" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/>'},
+  crm:     {label:"CRM activity", short:"CRM", c:"#0095A0", must:["Date","Contact email","Activity type"], nice:["Account name","Description"], tools:"Salesforce, HubSpot, Zoho, Dynamics",
+            icon:'<circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14c2 .8 3 2.9 3 6"/>'}
+};
+const KEYS = Object.keys(SOURCES);
+const files = [];
+let uid = 0;
+
+/* ----- source cards ----- */
+document.getElementById("sourceCards").innerHTML = KEYS.map(k=>{
+  const s=SOURCES[k];
+  return `<article class="src reveal" style="--c:${s.c}">
+    <div class="badge"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${s.icon}</svg></div>
+    <h3>${s.label}</h3>
+    <div class="k">Must have</div><ul>${s.must.map(m=>`<li>${m}</li>`).join("")}</ul>
+    <div class="k">Nice to have</div><ul>${s.nice.map(m=>`<li>${m}</li>`).join("")}</ul>
+    <div class="tools">${s.tools}</div></article>`;
+}).join("");
+
+/* ----- readiness ring ----- */
+const ringEl = document.getElementById("ring");
+const C = 2*Math.PI*70, seg = C/5, gap = 6;
+ringEl.innerHTML = KEYS.map((k,i)=>`<circle cx="90" cy="90" r="70" fill="none" stroke-width="18" stroke-linecap="butt" data-k="${k}" stroke="var(--line)" stroke-dasharray="${seg-gap} ${C-seg+gap}" stroke-dashoffset="${-i*seg}" style="transition:stroke .4s"></circle>`).join("");
+document.getElementById("srcList").innerHTML = KEYS.map(k=>`<li data-k="${k}" style="--c:${SOURCES[k].c}"><i></i>${SOURCES[k].label}</li>`).join("");
+
+/* ----- column detection ----- */
+const norm = h => String(h||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+const DETECT = {
+  date:     h => /date|time|timestamp|createdat|submitted|registered|joined/.test(h),
+  email:    h => /email|recipient/.test(h),
+  domain:   h => /domain|website/.test(h),
+  company:  h => /company|account|organi/.test(h),
+  activity: h => /activity|event|action|page|url|path|form|campaign|attend|type|subject|link|status/.test(h)
+};
+const COL_LABELS = {date:"Date", email:"Email", domain:"Domain", company:"Company", activity:"Activity"};
+
+function guessSource(name, headers){
+  const n = name.toLowerCase(), h = headers.map(norm).join(" ");
+  if(/webinar|zoom|on24|goto|livestorm|attendee|registrant/.test(n) || /attended|webinar|jointime/.test(h)) return "webinar";
+  if(/form|typeform|gravity|submission|webflow/.test(n) || /formname|submitted/.test(h)) return "form";
+  if(/mail|klaviyo|brevo|campaign|newsletter/.test(n) || /recipient|opened|clicked/.test(h)) return "email";
+  if(/crm|salesforce|sfdc|hubspot|zoho|dynamics|activit|meeting|engagement/.test(n)) return "crm";
+  if(/ga4|analytics|web|visit|page|traffic|site/.test(n) || /pagepath|pageurl|pagetitle/.test(h)) return "web";
+  return "";
+}
+
+function fmtSize(b){return b>1048576?(b/1048576).toFixed(1)+" MB":Math.max(1,Math.round(b/1024))+" KB"}
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function parseFile(f){
+  return new Promise((resolve)=>{
+    const ext = f.name.split(".").pop().toLowerCase();
+    if(ext==="xlsx"||ext==="xls"){
+      const r = new FileReader();
+      r.onload = e=>{
+        try{
+          const wb = XLSX.read(new Uint8Array(e.target.result),{type:"array",cellDates:true});
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:false});
+          const headers = (rows[0]||[]).map(String);
+          const body = rows.slice(1).filter(r=>r.some(v=>String(v).trim()!==""));
+          resolve({headers, rows:body.length, sample:body.slice(0,3)});
+        }catch(err){resolve({error:true})}
+      };
+      r.onerror=()=>resolve({error:true});
+      r.readAsArrayBuffer(f);
+    } else {
+      Papa.parse(f,{skipEmptyLines:true,complete:res=>{
+        const headers=(res.data[0]||[]).map(String);
+        const body=res.data.slice(1);
+        resolve({headers, rows:body.length, sample:body.slice(0,3)});
+      },error:()=>resolve({error:true})});
+    }
+  });
+}
+
+async function addFiles(list){
+  for(const f of list){
+    const ext=f.name.split(".").pop().toLowerCase();
+    if(!["csv","tsv","txt","xlsx","xls"].includes(ext)) continue;
+    const item={id:++uid,file:f,state:"load",source:"",headers:[],rows:0,sample:[],found:{}};
+    files.push(item); render();
+    if(f.size>25*1024*1024){item.state="big";render();continue}
+    const p = await parseFile(f);
+    if(p.error){item.state="err";render();continue}
+    item.headers=p.headers; item.rows=p.rows; item.sample=p.sample;
+    const nh=p.headers.map(norm);
+    for(const k in DETECT) item.found[k]=nh.some(DETECT[k]);
+    item.source=guessSource(f.name,p.headers);
+    item.state = item.found.date && (item.found.email||item.found.domain) ? "ok" : "check";
+    render();
+  }
+}
+
+function statusFor(it){
+  if(it.state==="load") return `<div class="status load">Reading file&hellip;</div>`;
+  if(it.state==="big") return `<div class="status check">This file is over 25 MB. Try a shorter date range or split it into two files.</div>`;
+  if(it.state==="err") return `<div class="status check">We couldn't read this file. Saving it again as CSV usually helps.</div>`;
+  if(it.state==="ok") return `<div class="status ok">&#10003; Ready for scoring${it.source?"":". Pick a source type above so signals are classified correctly."}</div>`;
+  const need=[]; if(!it.found.date) need.push("a date column"); if(!it.found.email&&!it.found.domain) need.push("an email or company domain column");
+  return `<div class="status check">Almost there: we're looking for ${need.join(" and ")}. Rename the header or pull a different export.</div>`;
+}
+
+function render(){
+  const box=document.getElementById("files");
+  box.innerHTML = files.map(it=>{
+    const s = SOURCES[it.source];
+    const opts = `<option value="">Choose source type</option>`+KEYS.map(k=>`<option value="${k}" ${it.source===k?"selected":""}>${SOURCES[k].label}</option>`).join("");
+    const cols = it.state==="ok"||it.state==="check" ? Object.keys(COL_LABELS).map(k=>`<span class="col ${it.found[k]?"on":"off"}">${it.found[k]?"&#10003;":"&#9675;"} ${COL_LABELS[k]}</span>`).join("") : "";
+    const prev = it.headers.length ? `<details class="prev"><summary>Preview first rows</summary><div class="tbl"><table><thead><tr>${it.headers.slice(0,8).map(h=>`<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${it.sample.map(r=>`<tr>${it.headers.slice(0,8).map((_,i)=>`<td>${esc(r[i])}</td>`).join("")}</tr>`).join("")}</tbody></table></div></details>` : "";
+    return `<div class="file" style="--c:${s?s.c:"#463F5C"}">
+      <div class="file-top">
+        <div class="ftype">${s?s.short:it.file.name.split(".").pop().toUpperCase().slice(0,4)}</div>
+        <div><div class="fname">${esc(it.file.name)}</div><div class="fmeta">${fmtSize(it.file.size)}${it.rows?` &middot; ${it.rows.toLocaleString()} row${it.rows===1?"":"s"}`:""}</div></div>
+        <button class="icon-btn" data-remove="${it.id}" aria-label="Remove ${esc(it.file.name)}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      </div>
+      <div class="file-row"><select data-src="${it.id}" aria-label="Source type for ${esc(it.file.name)}">${opts}</select>${cols}</div>
+      ${statusFor(it)}${prev}</div>`;
+  }).join("");
+  updateSide();
+}
+
+function updateSide(){
+  const ready = files.filter(f=>f.state==="ok");
+  const covered = new Set(ready.map(f=>f.source).filter(Boolean));
+  ringEl.querySelectorAll("circle").forEach(c=>c.setAttribute("stroke", covered.has(c.dataset.k)?SOURCES[c.dataset.k].c:"var(--line)"));
+  document.querySelectorAll("#srcList li").forEach(li=>li.classList.toggle("on",covered.has(li.dataset.k)));
+  document.getElementById("ringNum").textContent = covered.size+"/5";
+  document.getElementById("kFiles").textContent = files.length;
+  document.getElementById("kRows").textContent = ready.reduce((a,f)=>a+f.rows,0).toLocaleString();
+  const run=document.getElementById("run"), note=document.getElementById("runNote");
+  run.disabled = ready.length===0 || files.some(f=>f.state==="load");
+  if(ready.length===0) note.textContent="Add at least one file with a date column and an email or domain column.";
+  else if(covered.size<3) note.textContent=`${ready.length} file${ready.length>1?"s":""} ready. Adding more sources gives a fuller view of each account.`;
+  else note.textContent=`${ready.length} files ready across ${covered.size} sources. That's a strong starting set.`;
+  document.getElementById("result").classList.remove("show");
+}
+
+document.getElementById("files").addEventListener("click",e=>{
+  const b=e.target.closest("[data-remove]"); if(!b) return;
+  const i=files.findIndex(f=>f.id==b.dataset.remove); if(i>-1) files.splice(i,1); render();
+});
+document.getElementById("files").addEventListener("change",e=>{
+  const s=e.target.closest("[data-src]"); if(!s) return;
+  const it=files.find(f=>f.id==s.dataset.src); if(it){it.source=s.value; render();}
+});
+
+const drop=document.getElementById("drop"), input=document.getElementById("fileInput");
+input.addEventListener("change",()=>{addFiles([...input.files]); input.value="";});
+["dragenter","dragover"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over")}));
+drop.addEventListener("drop",e=>addFiles([...e.dataTransfer.files]));
+
+document.getElementById("run").addEventListener("click",async()=>{
+  const ready=files.filter(f=>f.state==="ok");
+  const meta={company:document.getElementById("company").value.trim(),email:document.getElementById("email").value.trim(),
+    window:document.getElementById("window").value,asOf:document.getElementById("view").value,notes:document.getElementById("notes").value.trim(),
+    files:ready.map(f=>({name:f.file.name,source:f.source||"auto",rows:f.rows}))};
+  const out=document.getElementById("result");
+  if(INTENT_CONFIG.endpoint){
+    const btn=document.getElementById("run");
+    const fd=new FormData(); fd.append("meta",JSON.stringify(meta));
+    ready.forEach(f=>fd.append("files",f.file,f.file.name));
+    out.className="result show busy";
+    out.innerHTML=`<span class="spin" aria-hidden="true"></span>Scoring ${ready.length} file${ready.length>1?"s":""}. This usually takes under a minute&hellip;`;
+    btn.disabled=true;
+    try{
+      const r=await fetch(INTENT_CONFIG.endpoint,{method:"POST",body:fd});
+      let data=null; try{data=await r.json()}catch(e){}
+      if(!r.ok||!data||!data.ok) throw new Error((data&&data.error)||"We couldn't score the files just now. Please try again in a moment.");
+      showResults(out,data);
+    }catch(err){
+      out.className="result show bad";
+      out.textContent=err.message&&!/fetch|network/i.test(err.message)?err.message:"We couldn't reach the scoring service. Please try again in a moment.";
+    }finally{btn.disabled=false}
+  } else {
+    const rows=ready.reduce((a,f)=>a+f.rows,0).toLocaleString();
+    out.innerHTML=`&#10003; ${ready.length} file${ready.length>1?"s":""} and ${rows} rows checked and ready${meta.company?` for ${esc(meta.company)}`:""}. Submission is in preview mode on this page.`;
+    out.classList.add("show");
+  }
+});
+
+/* ----- results ----- */
+const objectUrls=[];
+function blobUrl(content,type){const u=URL.createObjectURL(new Blob([content],{type}));objectUrls.push(u);return u}
+function showResults(out,d){
+  objectUrls.splice(0).forEach(u=>URL.revokeObjectURL(u));
+  const L={Hot:"#C0022F",Warm:"#FF6903",Watch:"#7A76DA"}, s=d.summary;
+  const rep=blobUrl(d.files.report.content,"text/html;charset=utf-8");
+  const acc=blobUrl(d.files.accounts.content,"text/csv;charset=utf-8");
+  const con=blobUrl(d.files.contacts.content,"text/csv;charset=utf-8");
+  const notes=[...(d.warnings||[]),...(d.notes||[])];
+  out.className="result show";
+  out.innerHTML=`<span class="rh">&#10003; ${s.accounts.toLocaleString()} account${s.accounts===1?"":"s"} scored${d.company?` for ${esc(d.company)}`:""}</span>
+    ${d.headline?`<div>${esc(d.headline)}</div>`:""}
+    <div class="rl">${["Hot","Warm","Watch"].map(k=>`<span><i style="background:${L[k]}"></i>${k} ${s.levels[k].toLocaleString()}</span>`).join("")}</div>
+    ${d.top&&d.top.length?`<ul class="rtop">${d.top.map(a=>`<li><span>${esc(a.name)}</span><span>${a.score} &middot; ${a.level}</span></li>`).join("")}</ul>`:""}
+    <div class="acts">
+      <a href="${rep}" target="_blank" rel="noopener">Open visual intent report <small>HTML</small></a>
+      <a href="${rep}" download="${esc(d.files.report.name)}">Download report <small>HTML</small></a>
+      <a href="${acc}" download="${esc(d.files.accounts.name)}">Account scores <small>CSV</small></a>
+      <a href="${con}" download="${esc(d.files.contacts.name)}">Contact scores <small>CSV</small></a>
+    </div>
+    ${notes.length?`<div class="rwarn">${notes.map(esc).join("<br>")}</div>`:""}`;
+}
+
+/* ----- motion ----- */
+const io=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target)}}),{threshold:.12});
+document.querySelectorAll(".reveal").forEach(el=>io.observe(el));
+const hb=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.querySelectorAll("[data-w]").forEach(d=>d.style.width=d.dataset.w);hb.unobserve(e.target)}}),{threshold:.3});
+hb.observe(document.getElementById("hbars"));
+requestAnimationFrame(()=>setTimeout(()=>document.getElementById("heroBar").style.width="78%",300));
+if(new URLSearchParams(location.search).get("static")==="1"){document.querySelectorAll(".reveal").forEach(e=>e.classList.add("in"))}
+</script>
+</body>
+</html>

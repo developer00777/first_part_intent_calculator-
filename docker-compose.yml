@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    image: intent-calculator:latest
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+
+  # Optional: expose the app through a Cloudflare Tunnel (no open ports needed on the server).
+  #   docker compose --profile tunnel up -d
+  # In the Cloudflare dashboard, point the tunnel's public hostname to http://app:8080
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
