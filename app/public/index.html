@@ -183,6 +183,8 @@ details.prev summary{cursor:pointer;font-weight:600;color:var(--accent);min-heig
 .result .acts a small{color:var(--muted);font-weight:500;font-family:var(--mono);font-size:12px}
 .result .rtop{margin:10px 0 0;padding:0;list-style:none;font-weight:500;color:var(--ink2)}
 .result .rtop li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-top:1px dashed var(--line)}
+.result .rsum{margin:10px 0 0;font-weight:500;color:var(--ink2)}
+.result .rtop small{font-weight:500;color:var(--muted)}
 .result .rwarn{margin-top:10px;font-weight:500;font-size:13px;color:var(--muted)}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;vertical-align:-2px;margin-right:8px}
 @keyframes sp{to{transform:rotate(360deg)}}
@@ -632,7 +634,7 @@ const objectUrls=[];
 function blobUrl(content,type){const u=URL.createObjectURL(new Blob([content],{type}));objectUrls.push(u);return u}
 function showResults(out,d){
   objectUrls.splice(0).forEach(u=>URL.revokeObjectURL(u));
-  const L={Hot:"#C0022F",Warm:"#FF6903",Watch:"#7A76DA"}, s=d.summary;
+  const L={Hot:"#F0453A",Warm:"#F5A524",Watch:"#2E8BEA"}, s=d.summary;
   const rep=blobUrl(d.files.report.content,"text/html;charset=utf-8");
   const acc=blobUrl(d.files.accounts.content,"text/csv;charset=utf-8");
   const con=blobUrl(d.files.contacts.content,"text/csv;charset=utf-8");
@@ -640,8 +642,11 @@ function showResults(out,d){
   out.className="result show";
   out.innerHTML=`<span class="rh">&#10003; ${s.accounts.toLocaleString()} account${s.accounts===1?"":"s"} scored${d.company?` for ${esc(d.company)}`:""}</span>
     ${d.headline?`<div>${esc(d.headline)}</div>`:""}
-    <div class="rl">${["Hot","Warm","Watch"].map(k=>`<span><i style="background:${L[k]}"></i>${k} ${s.levels[k].toLocaleString()}</span>`).join("")}</div>
-    ${d.top&&d.top.length?`<ul class="rtop">${d.top.map(a=>`<li><span>${esc(a.name)}</span><span>${a.score} &middot; ${a.level}</span></li>`).join("")}</ul>`:""}
+    <div class="rl">${["Hot","Warm","Watch"].map(k=>`<span><i style="background:${L[k]}"></i>${k} ${(s.levels[k]||0).toLocaleString()}</span>`).join("")}</div>
+    ${d.summaryText?`<p class="rsum">${esc(d.summaryText)}</p>`:""}
+    ${d.topHot&&d.topHot.length?`<ul class="rtop">${d.topHot.map(a=>`<li><span><b>${esc(a.name)}</b><br><small>${esc(a.reason)}</small></span></li>`).join("")}</ul>`
+      :(d.top&&d.top.length?`<ul class="rtop">${d.top.map(a=>`<li><span>${esc(a.name)}</span><span>${a.score} &middot; ${a.level}</span></li>`).join("")}</ul>`:"")}
+    ${d.nextStep?`<p class="rsum"><b>Next step:</b> ${esc(d.nextStep)}</p>`:""}
     <div class="acts">
       <a href="${rep}" target="_blank" rel="noopener">Open visual intent report <small>HTML</small></a>
       <a href="${rep}" download="${esc(d.files.report.name)}">Download report <small>HTML</small></a>

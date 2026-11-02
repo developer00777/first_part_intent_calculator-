@@ -1,0 +1,36 @@
+{
+  "signals": {
+    "demo_request":        {"label": "Demo or contact request", "points": 30},
+    "pricing_visit":       {"label": "Pricing page visit",      "points": 20},
+    "case_study_download": {"label": "Case study download",     "points": 15},
+    "webinar_attended":    {"label": "Webinar attendance",      "points": 12},
+    "product_visit":       {"label": "Product page visit",      "points": 10},
+    "whitepaper_download": {"label": "Whitepaper download",     "points": 8},
+    "email_click":         {"label": "Email click",             "points": 5},
+    "blog_visit":          {"label": "Blog visit",              "points": 3},
+    "email_open":          {"label": "Email open",              "points": 1},
+
+    "meeting_booked":      {"label": "Meeting booked",          "points": 30},
+    "email_reply":         {"label": "Email reply",             "points": 12},
+    "webinar_registered":  {"label": "Webinar registration",    "points": 6},
+    "other_web_visit":     {"label": "Other page visit",        "points": 2}
+  },
+  "recency": [
+    {"max_days": 7,  "multiplier": 1.0},
+    {"max_days": 30, "multiplier": 0.5},
+    {"max_days": 90, "multiplier": 0.2}
+  ],
+  "max_repeats_per_signal_per_contact": 5,
+  "buying_group_boost": [
+    {"min_contacts": 3, "multiplier": 1.25},
+    {"min_contacts": 2, "multiplier": 1.10}
+  ],
+  "score_cap": 100,
+  "saturation_points": 50,
+  "levels": [
+    {"name": "Hot",   "min_score": 70, "emoji": "🔥", "action": "Sales outreach this week"},
+    {"name": "Warm",  "min_score": 40, "emoji": "🌤️", "action": "Targeted nurture content"},
+    {"name": "Watch", "min_score": 0,  "emoji": "👀", "action": "Keep in general campaigns"}
+  ],
+  "free_email_domains": ["gmail.com","yahoo.com","hotmail.com","outlook.com","live.com","aol.com","icloud.com","me.com","msn.com","protonmail.com","proton.me","gmx.com","yandex.com","mail.com","rediffmail.com","zoho.com","yahoo.co.in","yahoo.co.uk"]
+}

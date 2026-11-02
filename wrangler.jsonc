@@ -21,7 +21,7 @@
 
   // Non-secret settings. Set the key with: npx wrangler secret put OPENROUTER_API_KEY
   "vars": {
-    "OPENROUTER_MODEL": "anthropic/claude-sonnet-5.5",
+    "OPENROUTER_MODEL": "anthropic/claude-haiku-5.5",
     "APP_URL": "https://intent-calculator.example.workers.dev",
     "CONTAINER_INSTANCES": "1"
   }

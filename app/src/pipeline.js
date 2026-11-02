@@ -1,157 +1,202 @@
-// End-to-end: files -> events -> signals (rules + model) -> scores -> narrative -> CSVs + report.
+// Runs the first-party-intent-calculator skill end to end for one upload:
+//   Step 2 inspect + mapping review -> normalize -> signal review   (runner.py + model)
+//   Step 3 config from the person's notes                          (model)
+//   Step 4 score_intent.py, sanity check                           (skill script + model)
+//   Step 5 build_report.py                                         (skill script)
+//   Step 6 summary                                                 (model, added to the report and the page)
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { parseTable } from "./parse.js";
-import { extractEvents, guessSource, SOURCE_KEYS } from "./extract.js";
-import { classifyByRules } from "./signals.js";
-import { scoreAll, WINDOW_DAYS } from "./score.js";
-import { llmEnabled, calibrate, classify, narrate, MODEL } from "./llm.js";
-import { accountsCsv, contactsCsv } from "./csv.js";
-import { renderReport } from "./report.js";
+import { llmEnabled, MODEL, SKILL_DIR, defaultConfig, reviewMapping, reviewSignals, tuneConfig, sanityCheck, usage, clean } from "./llm.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const BASE_CFG = JSON.parse(fs.readFileSync(path.join(here, "..", "config", "scoring.json"), "utf8"));
-
+const RUNNER = path.join(here, "..", "py", "runner.py");
+const PYTHON = process.env.PYTHON || (process.platform === "win32" ? "python" : "python3");
+const SOURCES = ["web", "email", "form", "webinar", "crm"];
+const FIELDS = ["email", "company", "domain", "date", "activity", "detail", "attended"];
 const log = (...a) => console.log(new Date().toISOString(), ...a);
+
+function py(cmd, work, req) {
+  const reqPath = path.join(work, `${cmd}-req.json`);
+  fs.writeFileSync(reqPath, JSON.stringify(req));
+  return new Promise((resolve, reject) => {
+    execFile(PYTHON, [RUNNER, cmd, work, reqPath], { env: { ...process.env, SKILL_DIR }, maxBuffer: 256 * 1024 * 1024, timeout: 300000 }, (err, stdout, stderr) => {
+      let out = null;
+      try { out = JSON.parse(stdout); } catch {}
+      if (out && !out.error && !err) return resolve(out);
+      reject(new Error(out?.error || stderr?.slice(-800) || err?.message || "runner failed"));
+    });
+  });
+}
+
+const step = async (notes, label, fn, fallback) => {
+  try { return await fn(); } catch (e) { notes.push(`${label} used the skill's defaults (${String(e.message).slice(0, 160)}).`); return fallback; }
+};
 
 export async function runPipeline(meta, uploads) {
   const t0 = Date.now();
-  const warnings = [];
-  const cfg = structuredClone(BASE_CFG);
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), "intent-"));
   const useLLM = llmEnabled();
-  const llmNotes = [];
+  const warnings = [], notes = [];
+  const u0 = { ...usage };
+  try {
+    // ---- save uploads (names are never used as paths) ----
+    const files = uploads.map((u, i) => {
+      const ext = path.extname(u.name).toLowerCase().replace(/[^.a-z]/g, "") || ".csv";
+      const p = `upload_${i}${ext}`;
+      fs.writeFileSync(path.join(work, p), u.buffer);
+      const declared = (meta.files || []).find((f) => f.name === u.name)?.source;
+      return { name: u.name, path: p, source: SOURCES.includes(declared) ? declared : undefined };
+    });
 
-  // 1. parse + extract
-  const events = [];
-  const fileReports = [];
-  for (const u of uploads) {
-    let table;
-    try {
-      table = parseTable(u.name, u.buffer);
-    } catch (e) {
-      warnings.push(`${u.name}: could not be read (${e.message}).`);
-      continue;
+    // ---- Step 2: inspect, review mapping ----
+    const ins = await py("inspect", work, { files });
+    const readable = [];
+    for (const f of ins.files) {
+      if (f.error) warnings.push(`${f.name} could not be read, so it was not included. Saving it again as CSV usually helps.`);
+      else readable.push(f);
     }
-    const declared = (meta.files || []).find((f) => f.name === u.name)?.source;
-    const source = SOURCE_KEYS.includes(declared) ? declared : guessSource(u.name, table.headers) || "crm";
-    const ex = extractEvents(table, source);
-    ex.warnings.forEach((w) => warnings.push(`${u.name}: ${w}`));
-    events.push(...ex.events);
-    fileReports.push({ name: u.name, source, rows: table.rows.length, used: ex.events.length });
-  }
-  if (!events.length) {
-    const err = new Error("None of the files had rows with a readable date and an email or domain.");
-    err.status = 422;
-    err.warnings = warnings;
-    throw err;
-  }
-
-  // 2. distinct activity labels -> signals
-  const distinct = new Map();
-  for (const e of events) {
-    const k = `${e.source}::${e.text}`;
-    e.ruleSignal = classifyByRules(e.source, e.text, e.attended);
-    // a webinar row with a known attendance flag is decided by the flag, not the title
-    if (e.source === "webinar" && e.attended !== null) continue;
-    if (!e.text) continue;
-    const d = distinct.get(k);
-    if (d) d.count++;
-    else distinct.set(k, { key: k, source: e.source, text: e.text, count: 1 });
-  }
-  const items = [...distinct.values()].sort((a, b) => b.count - a.count).map((it, i) => ({ ...it, id: String(i + 1) }));
-
-  let modelLabels = {};
-  if (useLLM) {
-    const [cal, cls] = await Promise.all([
-      calibrate(cfg, meta).catch((e) => ({ error: e.message })),
-      items.length ? classify(cfg, items, meta) : Promise.resolve({ labels: {}, errors: [] }),
-    ]);
-    if (cal.error) llmNotes.push(`Weight calibration skipped: ${cal.error}`);
-    else if (cal.multipliers && Object.keys(cal.multipliers).length) {
-      for (const [k, m] of Object.entries(cal.multipliers)) cfg.signals[k].points = Math.round(cfg.signals[k].points * m * 10) / 10;
-      llmNotes.push(`Weights adjusted for your notes: ${cal.rationale || Object.entries(cal.multipliers).map(([k, m]) => `${k} x${m}`).join(", ")}`);
-    }
-    cls.errors.forEach((e) => llmNotes.push(`Some activity labels used built-in rules: ${e}`));
-    for (const it of items) if (cls.labels[it.id]) modelLabels[it.key] = cls.labels[it.id];
-  }
-  let byModel = 0;
-  for (const e of events) {
-    const m = modelLabels[`${e.source}::${e.text}`];
-    if (m && !(e.source === "webinar" && e.attended !== null)) { e.signal = m; byModel++; }
-    else e.signal = e.ruleSignal;
-  }
-
-  // 3. score
-  const windowDays = WINDOW_DAYS[meta.window] || 90;
-  const result = scoreAll(events, cfg, { windowDays, asOf: meta.asOf === "today" ? "today" : "data" });
-  if (result.stats.eventsOutside) warnings.push(`${result.stats.eventsOutside.toLocaleString("en-US")} row(s) fell outside the ${meta.window || "selected"} window and were not scored.`);
-
-  // 4. narrative
-  let narrative = null;
-  if (useLLM && result.accounts.length) {
-    try {
-      narrative = await narrate(meta, result, cfg);
-      for (const a of result.accounts) {
-        const n = narrative.accounts[a.domain];
-        if (n?.reason) a.reason = n.reason;
-        if (n?.action) a.action = n.action;
+    if (useLLM && readable.length) {
+      const fixes = await step(notes, "Column review", () => reviewMapping(readable), {});
+      for (const f of readable) {
+        const fx = fixes[f.name];
+        if (!fx) continue;
+        if (SOURCES.includes(fx.source) && fx.source !== f.source) { notes.push(`${f.name}: treated as ${fx.source} data.`); f.source = fx.source; }
+        for (const [k, v] of Object.entries(fx.mapping || {})) {
+          if (!FIELDS.includes(k)) continue;
+          if (v === null || f.columns.includes(v)) {
+            if (f.mapping[k] !== v) notes.push(`${f.name}: ${k} read from ${v ? `"${v}"` : "no column"}${f.mapping[k] ? ` instead of "${f.mapping[k]}"` : ""}.`);
+            f.mapping[k] = v;
+          }
+        }
       }
-    } catch (e) {
-      llmNotes.push(`Report narrative used the built-in template: ${e.message}`);
     }
+    for (const f of readable) {
+      if (!f.mapping.date) warnings.push(`${f.name}: no date column was found, so its rows could not be scored.`);
+      if (!f.mapping.email && !f.mapping.domain) warnings.push(`${f.name}: no email or company domain column was found, so its rows could not be scored.`);
+    }
+
+    // ---- normalize ----
+    const norm = await py("normalize", work, { files: readable.map((f) => ({ name: f.name, path: f.path, source: f.source, mapping: f.mapping, dayfirst: f.dayfirst })) });
+    for (const r of norm.files) {
+      if (r.dayfirst) notes.push(`${r.name}: dates read as day/month/year.`);
+      if (r.dropped) warnings.push(`${r.name}: ${r.dropped.toLocaleString("en-US")} of ${r.rows.toLocaleString("en-US")} rows were set aside because they had no readable date or no email or domain.`);
+    }
+    if (!norm.events) {
+      const e = new Error("None of the files had rows with a readable date and an email or company domain.");
+      e.status = 422; e.warnings = warnings; throw e;
+    }
+
+    // ---- Step 2 signal review + Step 3 config (in parallel) ----
+    let cfg = defaultConfig();
+    const acts = norm.activities.map((a) => ({ ...a, key: `${a.source}\x1f${a._a}\x1f${a._d}` }));
+    const ordered = [...acts.filter((a) => !a.rule), ...acts.filter((a) => a.rule)];
+    let labels = {};
+    if (useLLM) {
+      const [lab, tuned] = await Promise.all([
+        step(notes, "Activity review", () => reviewSignals(ordered, cfg), {}),
+        step(notes, "Settings review", () => tuneConfig(cfg, meta), null),
+      ]);
+      labels = lab;
+      const changed = acts.filter((a) => labels[a.key]);
+      if (changed.length) {
+        const sig = cfg.signals;
+        const desc = changed.slice(0, 8).map((a) => {
+          const what = [a.activity, a.detail].filter(Boolean).join(" / ").slice(0, 60) || "(blank)";
+          const to = labels[a.key] === "skip" ? "set aside" : sig[labels[a.key]].label;
+          return `${a.source} "${what}" (${a.count} row${a.count === 1 ? "" : "s"}): ${to}`;
+        });
+        notes.push(`Reviewed ${changed.length} activity type${changed.length === 1 ? "" : "s"} the built-in rules could not place: ${desc.join("; ")}${changed.length > 8 ? "; and more" : ""}.`);
+      }
+      if (tuned) { cfg = tuned.config; notes.push(`Settings adjusted for your notes: ${tuned.changes.join("; ")}.${tuned.explanation ? " " + tuned.explanation : ""}`); }
+    }
+
+    // ---- Step 4 + 5: score and build report (skill scripts) ----
+    const scoreReq = { labels, config: cfg, as_of: meta.asOf === "today" ? "today" : "", client: meta.company, top: 25 };
+    let scored = await py("score", work, scoreReq);
+    let summaryText = null;
+    if (useLLM && scored.summary.accounts_scored) {
+      summaryText = await step(notes, "Summary", () => sanityCheck(scored.summary, meta, true), null);
+      if (summaryText?.saturation) {
+        cfg = { ...cfg, saturation_points: summaryText.saturation };
+        notes.push(`Saturation points set to ${summaryText.saturation} after the level check${summaryText.adjustReason ? `: ${summaryText.adjustReason}` : "."}`);
+        scored = await py("score", work, { ...scoreReq, config: cfg });
+        summaryText = await step(notes, "Summary", () => sanityCheck(scored.summary, meta, false), summaryText);
+      }
+    }
+    if (!summaryText) summaryText = templateSummary(scored.summary);
+    if (scored.set_aside_by_review) notes.push(`${scored.set_aside_by_review} rows were set aside because they show your team's own activity or list hygiene rather than buyer interest.`);
+
+    // ---- outputs ----
+    const out = path.join(work, "out");
+    const S = scored.summary;
+    let report = fs.readFileSync(path.join(out, "intent_report.html"), "utf8");
+    report = injectSummary(report, summaryText, notes);
+    const dt = S.as_of;
+    const slug = String(meta.company || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const fname = (b, ext) => `${slug ? slug + "_" : ""}${b}_${dt}.${ext}`;
+    const spent = { calls: usage.calls - u0.calls, prompt: usage.prompt - u0.prompt, completion: usage.completion - u0.completion, cost: +(usage.cost - u0.cost).toFixed(5) };
+    log(`scored files=${readable.length} events=${norm.events} accounts=${S.accounts_scored} llm=${useLLM} calls=${spent.calls} cost=$${spent.cost} ms=${Date.now() - t0}`);
+
+    return {
+      ok: true,
+      company: meta.company || "",
+      asOf: S.as_of,
+      model: useLLM ? MODEL : null,
+      usage: useLLM ? spent : null,
+      summary: {
+        accounts: S.accounts_scored, contacts: S.contacts_scored, levels: S.level_counts,
+        events: S.events_used, unclassified: S.events_unclassified, personal: S.personal_email_contacts,
+      },
+      headline: summaryText.headline,
+      summaryText: summaryText.summary,
+      topHot: summaryText.topHot,
+      nextStep: summaryText.nextStep,
+      top: S.accounts.slice(0, 5).map((a) => ({ name: a["Account Name"], domain: a["Domain"], score: a["Intent Score"], level: a["Intent Level"] })),
+      warnings,
+      notes: [...notes, ...summaryText.dataNotes],
+      files: {
+        report: { name: fname("intent_report", "html"), content: report },
+        accounts: { name: fname("intent_scores_accounts", "csv"), content: "﻿" + fs.readFileSync(path.join(out, "intent_scores_accounts.csv"), "utf8") },
+        contacts: { name: fname("intent_scores_contacts", "csv"), content: "﻿" + fs.readFileSync(path.join(out, "intent_scores_contacts.csv"), "utf8") },
+      },
+    };
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
   }
-  if (!narrative) narrative = templateNarrative(meta, result);
+}
 
-  // 5. outputs
-  const info = {
-    company: meta.company, email: meta.email, window: meta.window, asOfMode: meta.asOf, notes: meta.notes,
-    files: fileReports, model: useLLM ? MODEL : null, llmNotes, warnings, cfg,
-    classifiedByModel: byModel, totalEvents: events.length,
-  };
-  const report = renderReport(result, narrative, info);
-  log(`scored files=${fileReports.length} events=${events.length} accounts=${result.accounts.length} llm=${useLLM} ms=${Date.now() - t0}`);
-
+function templateSummary(S) {
+  const lc = S.level_counts || {};
+  const hot = S.accounts.filter((a) => a["Intent Level"] === "Hot").slice(0, 3);
+  if (!S.accounts_scored) {
+    return {
+      headline: "No company accounts could be scored yet",
+      summary: "The rows in these files could not be linked to a company, for example because they use personal email addresses or the activity is older than 90 days.",
+      topHot: [], dataNotes: [],
+      nextStep: "Add an export that includes work email addresses or company domains, ideally covering the last 90 days.",
+    };
+  }
   return {
-    ok: true,
-    company: meta.company || "",
-    asOf: result.asOf.toISOString().slice(0, 10),
-    model: useLLM ? MODEL : null,
-    summary: {
-      accounts: result.accounts.length,
-      contacts: result.contacts.length,
-      engagedContacts: result.stats.engagedContacts,
-      levels: result.stats.levels,
-      events: result.stats.eventsInWindow,
-    },
-    headline: narrative.headline,
-    top: result.accounts.slice(0, 5).map((a) => ({ name: a.name, domain: a.domain, score: a.score, level: a.level })),
-    warnings,
-    notes: llmNotes,
-    files: {
-      report: { name: fileName(meta.company, "intent-report", "html"), content: report },
-      accounts: { name: fileName(meta.company, "account-scores", "csv"), content: accountsCsv(result.accounts) },
-      contacts: { name: fileName(meta.company, "contact-scores", "csv"), content: contactsCsv(result.contacts) },
-    },
+    headline: hot.length ? `${lc.Hot} account${lc.Hot === 1 ? " is" : "s are"} ready for sales outreach this week` : "Your accounts are on the Warm and Watch lists for now",
+    summary: `${S.accounts_scored} accounts were scored: ${lc.Hot || 0} Hot, ${lc.Warm || 0} Warm and ${lc.Watch || 0} Watch.`,
+    topHot: hot.map((a) => ({ name: a["Account Name"], reason: a["Top Signals"] ? `Top signals: ${a["Top Signals"]}.` : "" })),
+    dataNotes: [],
+    nextStep: "Import the account CSV into your CRM matching on Domain, then build a view filtered to Intent Level = Hot for the sales team.",
   };
 }
 
-function fileName(company, kind, ext) {
-  const slug = String(company || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
-  return `${slug ? slug + "-" : ""}${kind}-${new Date().toISOString().slice(0, 10)}.${ext}`;
-}
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
-function templateNarrative(meta, result) {
-  const { Hot, Warm, Watch } = result.stats.levels;
-  const top = result.accounts[0];
-  const mix = result.stats.signalMix.slice(0, 3).map((s) => s.label.toLowerCase());
-  return {
-    headline: Hot ? `${Hot} account${Hot > 1 ? "s are" : " is"} ready for sales outreach this week` : `No Hot accounts yet; ${Warm} worth nurturing`,
-    summary:
-      `${result.accounts.length} accounts showed activity in the ${(meta.window || "selected window").toLowerCase()}: ${Hot} Hot, ${Warm} Warm and ${Watch} Watch. ` +
-      (top ? `${top.name} leads with a score of ${top.score}. ` : "") +
-      (mix.length ? `Most activity came from ${mix.join(", ")}.` : ""),
-    insights: [],
-    accounts: {},
-  };
+// Adds the Step 6 summary to the skill's report as one card, using the report's own classes (all text 19px+).
+function injectSummary(html, t, notes) {
+  const items = [...notes, ...t.dataNotes].map((n) => `<li>${esc(clean(n, 400))}</li>`).join("");
+  const hot = t.topHot.length ? `<ul class="notes">${t.topHot.map((h) => `<li><b>${esc(h.name)}</b>: ${esc(h.reason)}</li>`).join("")}</ul>` : "";
+  const card = `<section class="card"><h2>${esc(t.headline || "Summary")}</h2><p>${esc(t.summary)}</p>${hot}` +
+    (t.nextStep ? `<p><b>Next step:</b> ${esc(t.nextStep)}</p>` : "") +
+    (items ? `<p class="sub" style="margin-top:18px">About this run</p><ul class="notes">${items}</ul>` : "") + `</section>\n\n`;
+  const at = html.indexOf('<section class="grid2">');
+  return at > -1 ? html.slice(0, at) + card + html.slice(at) : html;
 }

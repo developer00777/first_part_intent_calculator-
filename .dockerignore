@@ -9,3 +9,4 @@ samples
 !app/public/*.html
 .git
 README.md
+**/__pycache__

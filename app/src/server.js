@@ -3,9 +3,10 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
-import { ALLOWED_EXT, extOf } from "./parse.js";
+const ALLOWED_EXT = ["csv", "tsv", "txt", "xlsx", "xls"];
+const extOf = (n) => String(n || "").split(".").pop().toLowerCase();
 import { runPipeline } from "./pipeline.js";
-import { llmEnabled, loadSkill, MODEL } from "./llm.js";
+import { llmEnabled, loadSkill, MODEL, SKILL_DIR } from "./llm.js";
 
 const PORT = +(process.env.PORT || 8080);
 const MAX_FILE_MB = +(process.env.MAX_FILE_MB || 25);
@@ -88,7 +89,7 @@ app.notFound((c) => c.json({ ok: false, error: "Not found" }, 404));
 serve({ fetch: app.fetch, port: PORT, hostname: "0.0.0.0" }, (i) => {
   const skill = loadSkill();
   console.log(
-    `Intent calculator listening on :${i.port} | model: ${llmEnabled() ? MODEL : "disabled (rules only)"} | skill: ${skill ? `${skill.length} chars` : "not found"}`
+    `Intent calculator listening on :${i.port} | model: ${llmEnabled() ? MODEL : "disabled (skill rules only)"} | skill: ${skill ? `${SKILL_DIR} (${skill.length} chars)` : "NOT FOUND at " + SKILL_DIR}`
   );
 });
 
